@@ -1,0 +1,27 @@
+# 1. Віртуальне середовище Python
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 2. Секретні ключі та токени
+.env
+credentials.json
+token.json
+
+# 3. Локальна база даних
+movies.db
+
+# 4. Згенеровані файли та завантажені медіа
+posters/
+index.html
+
+# 5. Налаштування редакторів коду (PyCharm, VS Code)
+.idea/
+.vscode/
+*.swp
+
+# 6. Системні файли ОС
+.DS_Store
+Thumbs.db
