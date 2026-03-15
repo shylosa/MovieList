@@ -66,3 +66,40 @@ class LocalMovieDB:
             )
             self.conn.commit()
             print("✅ Локальну базу очищено.")
+
+    def clean_orphan_posters(self):
+        print("🧹 Перевірка та очищення старих постерів...")
+
+        # Отримуємо всі дійсні шляхи до постерів з БД (завантажені автоматично)
+        self.cursor.execute("SELECT local_poster_path FROM movies WHERE local_poster_path IS NOT NULL")
+        valid_db_posters = {os.path.normpath(row[0]) for row in self.cursor.fetchall() if row[0]}
+
+        # Захищаємо "ручні" постери (які ти міг додати сам під назву файлу)
+        self.cursor.execute("SELECT filename FROM movies")
+        valid_manual_posters = {
+            os.path.normpath(os.path.join("posters", f"{os.path.splitext(row[0])[0]}.jpg"))
+            for row in self.cursor.fetchall()
+        }
+
+        # Об'єднуємо всі легальні постери в один набір
+        all_valid = valid_db_posters.union(valid_manual_posters)
+
+        posters_dir = "posters"
+        if not os.path.exists(posters_dir):
+            return
+
+        deleted_count = 0
+        # Проходимося по всіх файлах у папці posters
+        for file in os.listdir(posters_dir):
+            file_path = os.path.normpath(os.path.join(posters_dir, file))
+            if os.path.isfile(file_path) and file_path not in all_valid:
+                try:
+                    os.remove(file_path)
+                    deleted_count += 1
+                except Exception as e:
+                    print(f"⚠️ Не вдалося видалити {file}: {e}")
+
+        if deleted_count > 0:
+            print(f"✅ Видалено {deleted_count} неактуальних постерів (хвостів).")
+        else:
+            print("✨ Папка з постерами в ідеальному стані (хвостів немає).")

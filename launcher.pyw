@@ -62,10 +62,26 @@ def action_sync():
 
 def action_html():
     def task():
-        print("🎨 Генерація локальної вітрини...\n" + "-" * 40)
-        build_html.generate_html()
-        print("\n🌐 Відкриваю браузер...")
-        webbrowser.open('file://' + os.path.realpath('index.html'))
+        db_path = "movies.db"
+        html_path = "index.html"
+
+        # Перевіряємо, чи потрібно перегенерувати HTML
+        need_update = True
+        if os.path.exists(html_path) and os.path.exists(db_path):
+            db_mtime = os.path.getmtime(db_path)
+            html_mtime = os.path.getmtime(html_path)
+
+            if html_mtime > db_mtime:
+                need_update = False
+
+        if need_update:
+            print("🎨 База змінилася. Оновлюю вітрину...")
+            build_html.generate_html()
+        else:
+            print("✨ Вітрина вже актуальна. Відкриваю існуючий файл...")
+
+        print("🌐 Відкриваю браузер...")
+        webbrowser.open('file://' + os.path.realpath(html_path))
 
     run_in_thread(task)
 

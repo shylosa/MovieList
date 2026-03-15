@@ -67,7 +67,12 @@ def run_scan():
 
     print(f"📁 Сканування директорії: {folder_path}...")
     actual_disk_files = [f.name for f in scanner.scan()]
+
+    # 1. Видаляємо з бази записи про фільми, яких вже немає на диску
     db_local.remove_missing_files(actual_disk_files)
+
+    # 2. ОДРАЗУ прибираємо їхні старі постери та будь-яке інше сміття
+    db_local.clean_orphan_posters()
 
     existing_in_db = db_local.get_all_filenames()
     new_files = [f for f in actual_disk_files if f not in existing_in_db]
