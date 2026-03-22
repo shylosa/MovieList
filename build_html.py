@@ -1,14 +1,15 @@
 import sqlite3
 import os
 import json
-from config import APP_VERSION  # Беремо версію з нашого центру налаштувань!
+from datetime import datetime
+from config import APP_VERSION
 
 grid_icon_svg = '<svg viewBox="0 0 24 24" class="toggle-icon"><path d="M4 4h4v4H4V4m6 0h4v4h-4V4m6 0h4v4h-4V4M4 10h4v4H4v-4m6 0h4v4h-4v-4m6 0h4v4h-4v-4M4 16h4v4H4v-4m6 0h4v4h-4v-4m6 0h4v4h-4v-4Z"/></svg>'
 list_icon_svg = '<svg viewBox="0 0 24 24" class="toggle-icon"><path d="M4 6h16v2H4V6m0 5h16v2H4v-2m0 5h16v2H4v-2m-3 0h2v2H1v-2m0-5h2v2H1v-2m0-5h2v2H1V6"/></svg>'
 
 
 def generate_html():
-    print(f"🎨 Генерація локального веб-каталогу v{APP_VERSION}...")
+    print(f"🎨 Генерація локального веб-каталогу {APP_VERSION}...")
     try:
         conn = sqlite3.connect("movies.db")
         cursor = conn.cursor()
@@ -17,16 +18,19 @@ def generate_html():
             'SELECT filename, title_ua, title_en, year, genres, "cast", plot, local_poster_path FROM movies ORDER BY year DESC')
         movies = cursor.fetchall()
 
+        # --- Збираємо корисну статистику ---
+        total_movies = len(movies)
+        generation_time = datetime.now().strftime("%d.%m.%Y о %H:%M")
+
         html_content = f"""
         <!DOCTYPE html>
         <html lang="uk">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>MovieList - Локальний Каталог</title>
+            <title>MovieList {APP_VERSION}</title>
             <link rel="icon" type="image/x-icon" href="logo.ico">
             <style>
-                /* Той самий CSS залишається без змін */
                 body {{ background-color: #121212; color: #e0e0e0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; line-height: 1.6; }}
                 .sticky-header {{ position: sticky; top: 0; background: rgba(18, 18, 18, 0.95); backdrop-filter: blur(10px); z-index: 1000; padding: 15px 0; border-bottom: 1px solid #333; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }}
                 .controls {{ max-width: 95%; margin: 0 auto; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }}
@@ -39,12 +43,21 @@ def generate_html():
                 .btn-action.primary {{ background: #e50914; border-color: #e50914; }}
                 .btn-action.primary:hover {{ background: #b2070f; }}
                 .toggle-icon {{ width: 1.2em; height: 1.2em; fill: currentColor; vertical-align: middle; }}
-                .container {{ max-width: 95%; margin: 30px auto; }}
+
+                /* --- Панель статистики --- */
+                .stats-bar {{ max-width: 95%; margin: 15px auto 0; padding: 10px 20px; background: #1a1a1a; border-radius: 8px; border: 1px solid #333; display: flex; gap: 15px; font-size: 0.9em; color: #aaa; align-items: center; box-sizing: border-box; }}
+                .stats-bar strong {{ color: #fff; font-size: 1.1em; }}
+                .stats-divider {{ color: #444; }}
+                #filteredCount {{ color: #e50914; margin-left: -5px; }}
+                #filteredCount strong {{ color: #e50914; }}
+
+                .container {{ max-width: 95%; margin: 20px auto 30px; }}
                 .movie-list {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(650px, 1fr)); gap: 30px; transition: all 0.3s; }}
                 .card {{ display: flex; background: #1e1e1e; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 20px rgba(0,0,0,0.3); border: 1px solid #333; transition: transform 0.2s; }}
                 .card:hover {{ transform: translateY(-3px); border-color: #555; }}
-                .poster-container {{ flex-shrink: 0; width: 220px; background: #000; }}
-                .poster {{ width: 100%; height: 100%; object-fit: cover; display: block; }}
+                .poster-container {{ flex-shrink: 0; width: 220px; background: #000; overflow: hidden; }}
+                .poster {{ width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; transition: transform 0.3s, opacity 0.2s; }}
+                .poster:hover {{ opacity: 0.85; transform: scale(1.03); }}
                 .info {{ padding: 25px; display: flex; flex-direction: column; width: 100%; }}
                 .title-meta-group {{ display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 5px; }}
                 .title-ua {{ width: 100%; font-size: 1.6em; font-weight: bold; margin: 0 0 5px 0; color: #ffffff; line-height: 1.2; }}
@@ -55,6 +68,7 @@ def generate_html():
                 .details strong {{ color: #bbb; margin-right: 5px; }}
                 .plot {{ margin-top: 10px; font-size: 0.95em; color: #ccc; flex-grow: 1; text-align: justify; }}
                 .filename {{ margin-top: 20px; font-size: 0.85em; color: #aaa; font-family: monospace; text-align: right; border-top: 1px solid #333; padding-top: 5px; }}
+
                 .movie-list.list-view {{ grid-template-columns: 1fr; gap: 12px; }}
                 .movie-list.list-view .card {{ flex-direction: row; height: 145px; align-items: stretch; }}
                 .movie-list.list-view .poster-container {{ width: 95px; height: 100%; }}
@@ -67,10 +81,18 @@ def generate_html():
                 .movie-list.list-view .details {{ grid-column: 1; grid-row: 3 / 5; font-size: 0.85em; margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }}
                 .movie-list.list-view .plot {{ grid-column: 2; grid-row: 1 / 4; margin: 0; font-size: 0.85em; color: #bbb; text-align: left; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }}
                 .movie-list.list-view .filename {{ grid-column: 2; grid-row: 4; margin: 0; text-align: right; align-self: end; font-size: 0.75em; border: none; padding: 0; color: #bbb; }}
+
                 .no-results {{ grid-column: 1 / -1; text-align: center; padding: 50px; font-size: 1.2em; color: #888; display: none; }}
+
+                /* Модальне вікно для постера */
+                .modal {{ display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); backdrop-filter: blur(8px); justify-content: center; align-items: center; cursor: zoom-out; }}
+                .modal-content {{ max-width: 90vw; max-height: 90vh; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); object-fit: contain; }}
+
                 @media (max-width: 768px) {{
                     .controls {{ flex-direction: column; align-items: stretch; }}
                     .logo {{ text-align: center; margin: 0 0 10px 0; }}
+                    .stats-bar {{ flex-direction: column; gap: 5px; align-items: flex-start; }}
+                    .stats-divider {{ display: none; }}
                     .movie-list {{ grid-template-columns: 1fr; }}
                     .card {{ flex-direction: column; height: auto !important; }}
                     .poster-container {{ width: 100% !important; aspect-ratio: 2/3; }}
@@ -83,7 +105,7 @@ def generate_html():
         <body>
             <header class="sticky-header">
                 <div class="controls">
-                    <div class="logo">🍿 MovieList <span style="font-size: 0.5em; color: #555;">v{APP_VERSION}</span></div>
+                    <div class="logo">🍿 MovieList</div>
                     <button id="viewToggle" class="btn-action">{list_icon_svg}Список</button>
                     <input type="text" id="searchInput" class="search-input" placeholder="Шукати за назвою, актором, жанром чи роком...">
                     <select id="sortSelect" class="sort-select">
@@ -96,6 +118,13 @@ def generate_html():
                 </div>
             </header>
 
+            <div class="stats-bar">
+                <span>🎬 Всього у базі: <strong>{total_movies}</strong></span>
+                <span id="filteredCount" style="display: none;">(Знайдено: <strong id="filteredNum">0</strong>)</span>
+                <span class="stats-divider">|</span>
+                <span>📅 Останнє оновлення: <strong>{generation_time}</strong></span>
+            </div>
+
             <div class="container">
                 <div class="movie-list" id="movieList">
                     <div id="noResults" class="no-results">За вашим запитом нічого не знайдено 🤷‍♂️</div>
@@ -104,7 +133,6 @@ def generate_html():
         for m in movies:
             filename, title_ua, title_en, year, genres, cast_members, plot, poster_path = m
 
-            # Фронтенд-заглушки для порожніх значень
             title_en_display = title_en if title_en else ""
             year_display = year if year else "—"
             genres_display = genres if genres else "Не вказано"
@@ -143,6 +171,10 @@ def generate_html():
                 </div>
             </div>
 
+            <div id="imageModal" class="modal">
+                <img class="modal-content" id="modalImage">
+            </div>
+
             <script>
                 const searchInput = document.getElementById('searchInput');
                 const sortSelect = document.getElementById('sortSelect');
@@ -150,6 +182,9 @@ def generate_html():
                 const viewToggle = document.getElementById('viewToggle');
                 const movieList = document.getElementById('movieList');
                 const noResults = document.getElementById('noResults');
+
+                const filteredCountSpan = document.getElementById('filteredCount');
+                const filteredNum = document.getElementById('filteredNum');
 
                 let cards = Array.from(document.querySelectorAll('.card'));
 
@@ -204,7 +239,14 @@ def generate_html():
                         }
                     });
 
+                    // Керування написом "Знайдено: Х"
                     noResults.style.display = visibleCount === 0 ? 'block' : 'none';
+                    if (searchTerm === '') {
+                        filteredCountSpan.style.display = 'none';
+                    } else {
+                        filteredCountSpan.style.display = 'inline';
+                        filteredNum.textContent = visibleCount;
+                    }
 
                     visibleCards.sort((a, b) => {
                         const yearA = parseInt(a.querySelector('.year').innerText) || 0;
@@ -231,6 +273,22 @@ def generate_html():
                     sortSelect.value = 'year-desc';
                     filterAndSort();
                 });
+
+                // --- ЛОГІКА ЗБІЛЬШЕННЯ ПОСТЕРА (Lightbox) ---
+                const modalWrapper = document.getElementById('imageModal');
+                const modalImage = document.getElementById('modalImage');
+
+                movieList.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('poster')) {
+                        modalImage.src = e.target.src;
+                        modalWrapper.style.display = 'flex';
+                    }
+                });
+
+                modalWrapper.addEventListener('click', () => {
+                    modalWrapper.style.display = 'none';
+                    modalImage.src = ''; 
+                });
             </script>
         </body>
         </html>
@@ -238,7 +296,7 @@ def generate_html():
 
         with open("index.html", "w", encoding="utf-8") as f:
             f.write(html_content)
-        print(f"✅ Файл 'index.html' успішно оновлено!")
+        print(f"✅ Файл 'index.html' успішно оновлено з новими фічами!")
 
     except Exception as e:
         print(f"❌ Помилка генерації HTML: {e}")

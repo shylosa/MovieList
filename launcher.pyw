@@ -5,21 +5,26 @@ import sys
 import os
 import webbrowser
 import ctypes
+from tkinter import messagebox
+
+# --- ПОПЕРЕДНЯ ПЕРЕВІРКА ---
+if not os.path.exists(".env"):
+    error_root = tk.Tk()
+    error_root.withdraw() # Ховаємо фонове вікно, залишаємо тільки попап
+    messagebox.showerror(
+        "Відсутні налаштування",
+        "Файл '.env' не знайдено!\n\n"
+        "Для роботи програми необхідні API-ключі та вказаний шлях до папки з фільмами.\n\n"
+        "Що робити:\n"
+        "1. Створіть файл .env у папці з програмою.\n"
+        "2. Скопіюйте в нього налаштування з .env.example та додайте свої ключі.\n\n"
+        "Програма зараз завершить роботу."
+    )
+    sys.exit()
 
 import main
 import build_html
-
-
-def get_version():
-    try:
-        with open("version.txt", "r", encoding="utf-8") as f:
-            return f.read().strip()
-    except:
-        return "1.0.0"
-
-
-APP_VERSION = get_version()
-
+from config import APP_VERSION
 
 class TextRedirector:
     def __init__(self, widget):
@@ -64,23 +69,29 @@ def action_html():
     def task():
         db_path = "movies.db"
         html_path = "index.html"
+        script_path = "build_html.py"  # Додаємо наш скрипт
 
-        # Перевіряємо, чи потрібно перегенерувати HTML
         need_update = True
         if os.path.exists(html_path) and os.path.exists(db_path):
             db_mtime = os.path.getmtime(db_path)
             html_mtime = os.path.getmtime(html_path)
 
+            # Якщо база старіша за HTML, перевіряємо ще й версію всередині файлу
             if html_mtime > db_mtime:
-                need_update = False
+                from config import APP_VERSION
+                with open(html_path, "r", encoding="utf-8") as f:
+                    # Читаємо перші 1000 символів, де знаходиться тег <title>
+                    head_content = f.read(1000)
+                    if f"MovieList v{APP_VERSION}" in head_content:
+                        need_update = False  # Тільки якщо і база стара, і версія актуальна!
 
         if need_update:
-            print("🎨 База змінилася. Оновлюю вітрину...")
+            print("🎨 База або версія програми змінилися. Оновлюю вітрину...")
+            import build_html
             build_html.generate_html()
         else:
-            print("✨ Вітрина вже актуальна. Відкриваю існуючий файл...")
+            print("✨ Вітрина актуальна. Відкриваю...")
 
-        print("🌐 Відкриваю браузер...")
         webbrowser.open('file://' + os.path.realpath(html_path))
 
     run_in_thread(task)
@@ -92,7 +103,7 @@ except Exception:
     pass # На випадок, якщо запустимо не на Windows
 
 root = tk.Tk()
-root.title(f"MovieList v{APP_VERSION}")
+root.title(f"MovieList {APP_VERSION}")
 root.geometry("750x450")
 root.configure(bg="#121212")
 
@@ -173,6 +184,6 @@ console.configure(yscrollcommand=scrollbar.set)
 sys.stdout = TextRedirector(console)
 sys.stderr = TextRedirector(console)
 
-print(f"👋 Вітаємо у MovieList v{APP_VERSION}!\nОберіть потрібну дію на панелі зверху.\n")
+print(f"👋 Вітаємо у MovieList {APP_VERSION}!\nОберіть потрібну дію на панелі зверху.\n")
 
 root.mainloop()

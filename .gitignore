@@ -1,27 +1,26 @@
-# 1. Віртуальне середовище Python
-venv/
-env/
+# PyInstaller (Артефакти збірки)
+build/
+dist/
+*.spec
+
+# Python (Тимчасові файли)
 __pycache__/
 *.py[cod]
 *$py.class
+venv/
+.venv/
 
-# 2. Секретні ключі та токени
+# Конфіденційність (Ключі та налаштування)
 .env
 credentials.json
 token.json
 
-# 3. Локальна база даних
+# Локальні дані (База та картинки)
 movies.db
-
-# 4. Згенеровані файли та завантажені медіа
 posters/
+logs/
 index.html
 
-# 5. Налаштування редакторів коду (PyCharm, VS Code)
+# IDE (Налаштування PyCharm)
 .idea/
 .vscode/
-*.swp
-
-# 6. Системні файли ОС
-.DS_Store
-Thumbs.db

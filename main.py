@@ -35,9 +35,9 @@ def has_cyrillic(text: str) -> bool:
 
 
 def run_scan():
-    logging.info(f"=== Запуск сканування (v{APP_VERSION}) ===")
+    logging.info(f"=== Запуск сканування ({APP_VERSION}) ===")
 
-    print(f"🚀 Ініціалізація MovieList v{APP_VERSION}...")
+    print(f"🚀 Ініціалізація MovieList {APP_VERSION}...")
     db_local = LocalMovieDB()
     # Беремо змінні напряму з config.py
     scanner = VideoScanner(MEDIA_FOLDER_PATH, exclude_folders=EXCLUDE_LIST)
