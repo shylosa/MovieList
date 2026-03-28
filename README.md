@@ -3,7 +3,7 @@ Creator: Serhii Shylo
 Tags: Python, Movie Library, TMDB, Gemini AI, Google Sheets, HTML Catalog, Local Media, Automation
 Requires at least: Python 3.10, Google Cloud Console API, TMDB API Key, Gemini API Key
 License: MIT License
-Version: 1.4.0
+Version: 1.4.2
 ---
 
 # 🍿 MovieList - Менеджер локальної медіатеки

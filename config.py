@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.4.2"
 
 GITHUB_NAME = "shylosa"
 GITHUB_URL = "https://github.com/shylosa/MovieList"

@@ -10,6 +10,8 @@ from tkinter import messagebox
 import sqlite3
 from tkinter import ttk
 from datetime import datetime
+# Для точного вимірювання тексту без update_idletasks
+from tkinter.font import Font
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -108,7 +110,7 @@ def _apply_dark_titlebar(window: tk.Misc) -> None:
         dark = ctypes.c_int(2)
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark), 4)
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(dark), 4)
-    except Exception as e:
+    except Exception:
         pass
 
 
@@ -247,47 +249,51 @@ def _set_active_nav(key: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# PANEL SWITCHER ТА ВІДМАЛЬОВКА ВКАЛДКИ
+# PANEL SWITCHER ТА ВІДМАЛЬОВКА ВКЛАДКИ
 # ---------------------------------------------------------------------------
 _panels: dict[str, ctk.CTkFrame] = {}
 _active_panel_key: str = ""
 
+# Кешований об'єкт шрифту для вимірювання тексту вкладки — без update_idletasks()
+_tab_font_obj: Font | None = None
+
 
 def _update_tab_shape(title: str) -> None:
+    global _tab_font_obj
     slant = 20
     pad_right = 16
     pad_left = 14
 
-    # Міряємо текст
-    tab_canvas.itemconfig(tab_text, text=title)
-    tab_canvas.update_idletasks()
-    bbox = tab_canvas.bbox(tab_text)
-    text_w = (bbox[2] - bbox[0]) if bbox else 60
+    # Ліниво ініціалізуємо Font-об'єкт один раз
+    if _tab_font_obj is None:
+        _tab_font_obj = Font(family="Arial", size=14, weight="bold")
+
+    # Font.measure() — синхронний, не потребує update_idletasks()
+    text_w = _tab_font_obj.measure(title)
 
     tab_w = text_w + pad_left + pad_right + slant
     h = 58
 
-    # Підганяємо розмір canvas під вкладку
     tab_canvas.configure(width=tab_w, height=h)
 
-    # Полігон: ліво-верх зі скосом, право — прямий край
     tab_canvas.coords(tab_poly,
-                      slant, 0,  # верхній лівий (скошений)
-                      tab_w, 0,  # верхній правий
-                      tab_w, h,  # нижній правий
-                      0, h,  # нижній лівий
+                      slant, 0,
+                      tab_w, 0,
+                      tab_w, h,
+                      0, h,
                       )
 
-    # Текст — від правого краю з відступом
     tab_canvas.coords(tab_text, tab_w - pad_right, h // 2)
-    tab_canvas.itemconfig(tab_text, anchor="e")
+    tab_canvas.itemconfig(tab_text, text=title, anchor="e")
 
 
 def _show_panel(key: str) -> None:
     global _active_panel_key
-    if _active_panel_key in _panels: _panels[_active_panel_key].grid_remove()
+    if _active_panel_key in _panels:
+        _panels[_active_panel_key].grid_remove()
     _active_panel_key = key
-    if key in _panels: _panels[key].grid()
+    if key in _panels:
+        _panels[key].grid()
 
     titles = {"overview": "Огляд", "editor": "Редактор"}
     _update_tab_shape(titles.get(key, ""))
@@ -321,10 +327,12 @@ def action_html():
                     with open(HTML_PATH, "r", encoding="utf-8") as f:
                         head = f.read(2048)
                     m = re.search(r'<meta\s+name="app-version"\s+content="([^"]+)"', head)
-                    if m and m.group(1) == APP_VERSION: need_update = False
+                    if m and m.group(1) == APP_VERSION:
+                        need_update = False
                 except Exception:
                     pass
-        if need_update: build_html.generate_html()
+        if need_update:
+            build_html.generate_html()
         webbrowser.open("file://" + os.path.realpath(HTML_PATH))
 
     run_in_thread(task)
@@ -335,6 +343,7 @@ def action_logs():
         os.makedirs("logs")
     os.startfile(os.path.realpath("logs"))
 
+
 def action_open_sheet():
     sheet_url = os.getenv("GOOGLE_SHEET_URL")
     if sheet_url:
@@ -342,6 +351,7 @@ def action_open_sheet():
         webbrowser.open(sheet_url)
     else:
         print("❌ Помилка: GOOGLE_SHEET_URL не знайдено у файлі .env")
+
 
 # ---------------------------------------------------------------------------
 # PANEL: OVERVIEW
@@ -356,16 +366,15 @@ def _build_overview_panel(parent: ctk.CTkFrame) -> ctk.CTkFrame:
     cards.columnconfigure((0, 1, 2), weight=1)
 
     def _card(col, title, sub_default, sub_color=None):
-        card = ctk.CTkFrame(cards, fg_color=C["stat_bg"], corner_radius=8, border_width=1, border_color=C["stat_brd"])
+        card = ctk.CTkFrame(cards, fg_color=C["stat_bg"], corner_radius=8, border_width=1,
+                            border_color=C["stat_brd"])
         card.grid(row=0, column=col, sticky="ew", padx=5, pady=2)
-        ctk.CTkLabel(card, text=title, font=("Arial", 9, "bold"), text_color=C["text_dim"], anchor="w").pack(anchor="w",
-                                                                                                             padx=12,
-                                                                                                             pady=(6,
-                                                                                                                   0))
+        ctk.CTkLabel(card, text=title, font=("Arial", 9, "bold"), text_color=C["text_dim"], anchor="w").pack(
+            anchor="w", padx=12, pady=(6, 0))
         val = ctk.CTkLabel(card, text="—", font=("Arial", 16, "bold"), text_color=C["text_primary"], anchor="w")
         val.pack(anchor="w", padx=12, pady=(0, 2))
-        sub = ctk.CTkLabel(card, text=sub_default, font=("Arial", 11), text_color=sub_color or C["text_muted"],
-                           anchor="w")
+        sub = ctk.CTkLabel(card, text=sub_default, font=("Arial", 11),
+                           text_color=sub_color or C["text_muted"], anchor="w")
         sub.pack(anchor="w", padx=12, pady=(0, 6))
         return val, sub
 
@@ -413,7 +422,7 @@ def _build_overview_panel(parent: ctk.CTkFrame) -> ctk.CTkFrame:
 
 
 # ---------------------------------------------------------------------------
-# PANEL: EDITOR
+# PANEL: EDITOR  — оптимізована версія
 # ---------------------------------------------------------------------------
 def _build_editor_panel(parent: ctk.CTkFrame) -> ctk.CTkFrame:
     panel = ctk.CTkFrame(parent, fg_color=C["editor_bg"])
@@ -425,9 +434,8 @@ def _build_editor_panel(parent: ctk.CTkFrame) -> ctk.CTkFrame:
     toolbar.columnconfigure(1, weight=1)
 
     search_var = tk.StringVar()
-    ctk.CTkEntry(toolbar, textvariable=search_var, placeholder_text="Пошук...", height=34).grid(row=0, column=1,
-                                                                                                sticky="ew",
-                                                                                                padx=(0, 10))
+    ctk.CTkEntry(toolbar, textvariable=search_var, placeholder_text="Пошук...", height=34).grid(
+        row=0, column=1, sticky="ew", padx=(0, 10))
 
     ctk.CTkButton(
         toolbar, text="✨ Виправити вибрані",
@@ -442,17 +450,17 @@ def _build_editor_panel(parent: ctk.CTkFrame) -> ctk.CTkFrame:
     header_f.pack_propagate(False)
 
     tk.Label(header_f, text="", bg=C["editor_header"], width=4).pack(side="left")
-    tk.Label(header_f, text="Файл", bg=C["editor_header"], fg=C["text_primary"], font=("Arial", 10, "bold"), width=38,
-             anchor="w").pack(side="left")
-    tk.Label(header_f, text="", bg=C["editor_header"], fg=C["text_primary"], font=("Arial", 10, "bold"),
-             anchor="w").pack(side="left", fill="x", expand=True)
-    tk.Label(header_f, text="Розпізнано як", bg=C["editor_header"], fg=C["text_primary"], font=("Arial", 10, "bold"),
-             anchor="w").pack(side="left", fill="x", expand=True)
+    tk.Label(header_f, text="Файл", bg=C["editor_header"], fg=C["text_primary"],
+             font=("Arial", 10, "bold"), width=38, anchor="w").pack(side="left")
+    tk.Label(header_f, text="", bg=C["editor_header"], fg=C["text_primary"],
+             font=("Arial", 10, "bold"), anchor="w").pack(side="left", fill="x", expand=True)
+    tk.Label(header_f, text="Розпізнано як", bg=C["editor_header"], fg=C["text_primary"],
+             font=("Arial", 10, "bold"), anchor="w").pack(side="left", fill="x", expand=True)
     tk.Label(header_f, text="Рік / ID / URL (підказка)", bg=C["editor_header"], fg=C["text_primary"],
              font=("Arial", 10, "bold")).pack(side="right", padx=16)
 
     scroll_wrap = ctk.CTkFrame(panel, fg_color="transparent")
-    scroll_wrap.grid(row=2, column=0, sticky="nsew", padx=16, pady=(0, 0))
+    scroll_wrap.grid(row=2, column=0, sticky="nsew", padx=16)
     scroll_wrap.columnconfigure(0, weight=1)
     scroll_wrap.rowconfigure(0, weight=1)
 
@@ -465,14 +473,16 @@ def _build_editor_panel(parent: ctk.CTkFrame) -> ctk.CTkFrame:
     canvas._last_w = 0
 
     def _on_canvas_configure(e):
-        if e.width == canvas._last_w: return
+        if e.width == canvas._last_w:
+            return
         canvas._last_w = e.width
         canvas.itemconfig(scroll_window_id, width=e.width)
 
     scroll_frame._last_h = 0
 
     def _on_frame_configure(e):
-        if e.height == scroll_frame._last_h: return
+        if e.height == scroll_frame._last_h:
+            return
         scroll_frame._last_h = e.height
         canvas.configure(scrollregion=canvas.bbox("all"))
 
@@ -483,123 +493,212 @@ def _build_editor_panel(parent: ctk.CTkFrame) -> ctk.CTkFrame:
     canvas.grid(row=0, column=0, sticky="nsew")
     scrollbar.grid(row=0, column=1, sticky="ns")
 
-    # Скролінг коліщатком миші — точкова прив'язка
     def _on_mousewheel(event):
         canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
+    # ✅ CTk забороняє bind_all на своїх віджетах, тому використовуємо Enter/Leave:
+    # при вході курсора в зону Editor-скролу — вішаємо обробник на рівні root через
+    # чистий tk (tk.Misc.bind обходить CTk-перевірку), при виході — знімаємо.
+    # Це стандартна практика для CTk-сумісного глобального скролу.
+    _scroll_bound = [False]
+
+    def _bind_scroll(e=None):
+        if not _scroll_bound[0]:
+            tk.Misc.bind(root, "<MouseWheel>", _on_mousewheel, add="+")
+            _scroll_bound[0] = True
+
+    def _unbind_scroll(e=None):
+        if _scroll_bound[0]:
+            tk.Misc.bind(root, "<MouseWheel>", lambda e: None)
+            _scroll_bound[0] = False
+
+    canvas.bind("<Enter>", _bind_scroll)
+    canvas.bind("<Leave>", _unbind_scroll)
+    scroll_frame.bind("<Enter>", _bind_scroll)
+    scroll_frame.bind("<Leave>", _unbind_scroll)
+    # Прямий bind на canvas і scroll_frame — fallback
     canvas.bind("<MouseWheel>", _on_mousewheel)
     scroll_frame.bind("<MouseWheel>", _on_mousewheel)
 
-    check_vars, hint_vars, all_rows = {}, {}, []
+    check_vars: dict[str, tk.BooleanVar] = {}
+    hint_vars: dict[str, tk.StringVar] = {}
+    all_rows: list = []
 
-    def _load_db():
+    # ✅ ОПТИМІЗАЦІЯ: dirty flag — перезавантаження з БД тільки коли потрібно
+    _state = {"db_loaded": False, "db_mtime": 0.0}
+
+    def _load_db_if_needed():
         nonlocal all_rows
-        if not os.path.exists(DB_PATH): return
+        try:
+            current_mtime = os.path.getmtime(DB_PATH) if os.path.exists(DB_PATH) else 0.0
+        except OSError:
+            current_mtime = 0.0
+
+        if _state["db_loaded"] and _state["db_mtime"] == current_mtime:
+            return  # БД не змінювалась — пропускаємо зайвий SQL
+
+        if not os.path.exists(DB_PATH):
+            return
+
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
         cur.execute("SELECT filename, title_ua, title_en, year FROM movies ORDER BY rowid DESC")
         all_rows = cur.fetchall()
         conn.close()
+
+        # Ініціалізуємо тільки нові ключі, не скидаємо вже виставлені чекбокси
         for f, *_ in all_rows:
-            if f not in check_vars: check_vars[f], hint_vars[f] = tk.BooleanVar(), tk.StringVar()
+            if f not in check_vars:
+                check_vars[f] = tk.BooleanVar()
+                hint_vars[f] = tk.StringVar()
 
-    # --- НАЛАШТУВАННЯ СТИЛЮ ДЛЯ ЧЕКБОКСІВ (Ttk) ---
-    style = ttk.Style()
-    # Використовуємо 'clam' тему, вона найкраще піддається кастомізації і не має тіней
-    style.theme_use('clam')
+        _state["db_loaded"] = True
+        _state["db_mtime"] = current_mtime
 
-    # Налаштування розмірів квадрата та обводки через padding
-    # (padding=[ліво, верх, право, низ])
-    style.configure("TCheckbutton",
-                    background=C["editor_row"],  # Фон рядка
-                    foreground="white",  # Не використовується, бо немає тексту
-                    padding=[8, 0, 0, 0]  # Збільшує відступ квадрата
-                    )
+    # ✅ ОПТИМІЗАЦІЯ: пул віджетів рядків — reuse замість destroy/create
+    # Зберігаємо посилання на існуючі рядки для перевикористання
+    _row_pool: list[dict] = []
 
-    # Налаштування кольорів самого квадрата в різних станах
-    style.map("TCheckbutton",
-              background=[('active', C["editor_row"])],  # Фон при наведенні
-              indicatorcolor=[
-                  ('selected', C["accent"]),  # Колір заповнення (активний)
-                  ('!selected', C["editor_input"])  # Колір заповнення (неактивний)
-              ],
-              focuscolor=[('active', C["editor_row"])]
-              )
+    def _get_or_create_row(index: int) -> dict:
+        """Повертає існуючий або новий словник з віджетами рядка."""
+        if index < len(_row_pool):
+            return _row_pool[index]
 
-    def _render(rows):
-        for w in scroll_frame.winfo_children(): w.destroy()
+        bg = C["editor_row"]  # Placeholder, буде оновлено в _render()
+
+        row_f = tk.Frame(scroll_frame, bg=bg, pady=4)
+
+        cb = tk.Label(
+            row_f,
+            text="",
+            font=("Segoe UI Symbol", 14, "bold"),
+            width=2, height=1,
+            bg=C["editor_input"],
+            fg="white",
+            bd=0,
+            cursor="hand2",
+            highlightthickness=1,
+            highlightbackground=C["sidebar_brd"]
+        )
+        cb.pack(side="left", padx=(12, 8), pady=4)
+
+        lbl_f = tk.Label(row_f, text="", bg=bg, fg=C["text_normal"], font=("Consolas", 12), width=40, anchor="w")
+        lbl_f.pack(side="left")
+
+        lbl_arr = tk.Label(row_f, text="➜", bg=bg, fg=C["text_dim"], width=3)
+        lbl_arr.pack(side="left")
+
+        lbl_title = tk.Label(row_f, text="", bg=bg, fg=C["blue_text"], font=("Arial", 12, "bold"), anchor="w")
+        lbl_title.pack(side="left", fill="x", expand=True)
+
+        hint_e = tk.Entry(
+            row_f,
+            bg=C["editor_input"], fg=C["text_primary"],
+            insertbackground="white", bd=0, highlightthickness=1,
+            highlightbackground=C["sidebar_brd"], font=("Arial", 11), width=18
+        )
+        hint_e.pack(side="right", padx=16, pady=2, ipady=3)
+
+        widgets = {
+            "frame": row_f, "cb": cb, "lbl_f": lbl_f,
+            "lbl_arr": lbl_arr, "lbl_title": lbl_title, "hint_e": hint_e,
+            "fname": None,  # Поточний fname прив'язаний до цього рядка
+        }
+        _row_pool.append(widgets)
+        return widgets
+
+    def _render(rows: list) -> None:
+        """
+        Оптимізований рендер: reuse існуючих tk-віджетів, hide зайвих.
+        Замість destroy/create O(n) — тільки configure() на існуючих.
+        """
+        needed = len(rows)
+        pool_size = len(_row_pool)
+
+        # 1. Розширюємо пул якщо потрібно більше рядків
+        for i in range(pool_size, needed):
+            _get_or_create_row(i)
+
+        # 2. Оновлюємо дані в існуючих рядках (тільки configure, без destroy)
         for i, (fname, t_ua, t_en, yr) in enumerate(rows):
-            bg_color = C["editor_row"] if i % 2 == 0 else C["editor_row_alt"]
-            row_f = tk.Frame(scroll_frame, bg=bg_color, pady=4)
-            row_f.pack(fill="x")
+            w = _row_pool[i]
+            bg = C["editor_row"] if i % 2 == 0 else C["editor_row_alt"]
 
-            # Прив'язуємо скрол також і до внутрішніх рядків, щоб працював на них
-            row_f.bind("<MouseWheel>", _on_mousewheel)
+            # Оновлюємо fname прив'язку тільки якщо вона змінилась
+            if w["fname"] != fname:
+                w["fname"] = fname
 
-            def _toggle_cb(label_widget, f_key):
-                new_val = not check_vars[f_key].get()
-                check_vars[f_key].set(new_val)
-                if new_val:
-                    # Коли вибрано: біла галка, без рамки
-                    label_widget.configure(text="✔", bg=C["editor_input"], fg="white", highlightbackground=C["editor_input"])
-                else:
-                    # Коли порожньо: темний фон, без тексту, сіра рамка
-                    label_widget.configure(text="", bg=C["editor_input"], highlightbackground=C["sidebar_brd"])
+                # Перев'язуємо чекбокс до нового fname
+                cb = w["cb"]
+                cb.bind("<Button-1>", lambda e, l=cb, f=fname: _toggle_cb(l, f))
 
-            # 2. Сама конструкція чекбокса (нативний Label з імітацією рамки)
+                # Прив'язуємо Entry до нової StringVar
+                w["hint_e"].configure(textvariable=hint_vars[fname])
+
+            # Оновлюємо візуальний стан
             is_selected = check_vars[fname].get()
-            cb = tk.Label(
-                row_f,
+            w["cb"].configure(
                 text="✔" if is_selected else "",
-                font=("Segoe UI Symbol", 14, "bold"),
-                width=2, height=1,  # Фіксований розмір у знакомісцях
-                bg=C["editor_input"] if is_selected else C["editor_input"],
-                fg="white",
-                bd=0,
-                cursor="hand2",
-                highlightthickness=1,  # Оце створює ідеальну пласку рамку
                 highlightbackground=C["editor_input"] if is_selected else C["sidebar_brd"]
             )
-            cb.pack(side="left", padx=(12, 8), pady=4)
-
-            # Прив'язуємо клік
-            cb.bind("<Button-1>", lambda e, l=cb, f=fname: _toggle_cb(l, f))
-            # Прив'язуємо скрол, щоб не гальмував на чекбоксі
-            cb.bind("<MouseWheel>", _on_mousewheel)
 
             short_fname = fname if len(fname) <= 40 else fname[:37] + "…"
-            lbl_f = tk.Label(row_f, text=short_fname, bg=bg_color, fg=C["text_normal"], font=("Consolas", 12), width=40,
-                             anchor="w")
-            lbl_f.pack(side="left")
-            lbl_f.bind("<MouseWheel>", _on_mousewheel)
+            title_text = f"{t_ua or t_en} ({yr})"
 
-            lbl_arr = tk.Label(row_f, text="➜", bg=bg_color, fg=C["text_dim"], width=3)
-            lbl_arr.pack(side="left")
-            lbl_arr.bind("<MouseWheel>", _on_mousewheel)
+            # Оновлюємо лейбли тільки якщо текст змінився (економимо configure-calls)
+            if w["lbl_f"].cget("text") != short_fname:
+                w["lbl_f"].configure(text=short_fname, bg=bg)
+            if w["lbl_title"].cget("text") != title_text:
+                w["lbl_title"].configure(text=title_text, bg=bg)
 
-            lbl_title = tk.Label(row_f, text=f"{t_ua or t_en} ({yr})", bg=bg_color, fg=C["blue_text"],
-                                 font=("Arial", 12, "bold"), anchor="w")
-            lbl_title.pack(side="left", fill="x", expand=True)
-            lbl_title.bind("<MouseWheel>", _on_mousewheel)
+            w["frame"].configure(bg=bg)
+            w["lbl_arr"].configure(bg=bg)
 
-            hint_e = tk.Entry(
-                row_f, textvariable=hint_vars[fname],
-                bg=C["editor_input"], fg=C["text_primary"],
-                insertbackground="white", bd=0, highlightthickness=1,
-                highlightbackground=C["sidebar_brd"], font=("Arial", 11), width=18
-            )
-            hint_e.pack(side="right", padx=16, pady=2, ipady=3)
-            hint_e.bind("<MouseWheel>", _on_mousewheel)
+            # Показуємо рядок якщо він був захований
+            if not w["frame"].winfo_ismapped():
+                w["frame"].pack(fill="x")
+
+        # 3. Ховаємо зайві рядки з пулу (замість destroy)
+        for i in range(needed, len(_row_pool)):
+            w = _row_pool[i]
+            if w["frame"].winfo_ismapped():
+                w["frame"].pack_forget()
+
+    def _toggle_cb(label_widget, f_key):
+        new_val = not check_vars[f_key].get()
+        check_vars[f_key].set(new_val)
+        if new_val:
+            label_widget.configure(text="✔", bg=C["editor_input"], fg="white",
+                                   highlightbackground=C["editor_input"])
+        else:
+            label_widget.configure(text="", bg=C["editor_input"],
+                                   highlightbackground=C["sidebar_brd"])
+
+    # ✅ ОПТИМІЗАЦІЯ: debounce для пошуку — не рендеримо на кожен символ
+    _filter_after_id = [None]
 
     def _filter(*_):
-        q = search_var.get().lower()
-        _render([r for r in all_rows if q in r[0].lower() or q in (r[1] or r[2] or "").lower()] if q else all_rows)
+        if _filter_after_id[0] is not None:
+            root.after_cancel(_filter_after_id[0])
+
+        def _do_filter():
+            q = search_var.get().lower()
+            filtered = (
+                [r for r in all_rows if q in r[0].lower() or q in (r[1] or r[2] or "").lower()]
+                if q else all_rows
+            )
+            _render(filtered)
+            _filter_after_id[0] = None
+
+        # 120ms debounce — непомітно для юзера, але знімає навантаження при швидкому друку
+        _filter_after_id[0] = root.after(120, _do_filter)
 
     search_var.trace_add("write", _filter)
 
     def _process_selected():
         sel = [{"filename": f, "hint": hint_vars[f].get().strip()} for f, v in check_vars.items() if v.get()]
-        if not sel: return
+        if not sel:
+            return
 
         _show_panel("overview")
         _set_active_nav("scan")
@@ -607,12 +706,24 @@ def _build_editor_panel(parent: ctk.CTkFrame) -> ctk.CTkFrame:
         def task():
             main.fix_recognition(sel)
             root.after(0, refresh_stats)
-            root.after(0, panel.reload)
+            # Інвалідуємо кеш — наступне відкриття Editor перезавантажить БД
+            _state["db_loaded"] = False
+            root.after(0, lambda: _reload_funcs["editor"]())
 
         run_in_thread(task)
 
-    _reload_funcs["editor"] = lambda: (_load_db(), _filter())
-    _reload_funcs["editor"]()
+    def _reload():
+        _load_db_if_needed()
+        _filter()
+
+    _reload_funcs["editor"] = _reload
+
+    # Перше завантаження
+    _reload()
+
+    # Зберігаємо reload як метод панелі для зворотної сумісності
+    panel.reload = _reload
+
     return panel
 
 
@@ -628,6 +739,23 @@ except Exception:
 # ГОЛОВНЕ ВІКНО
 # ---------------------------------------------------------------------------
 root = ctk.CTk()
+
+# ✅ Style ініціалізується ПІСЛЯ root = ctk.CTk(), інакше Python автоматично
+# створює дефолтний Tk() як implicit root — він і з'являється як зайве біле вікно.
+_ttk_style = ttk.Style(root)
+_ttk_style.theme_use("clam")
+_ttk_style.configure("TCheckbutton",
+                      background=C["editor_row"],
+                      foreground="white",
+                      padding=[8, 0, 0, 0])
+_ttk_style.map("TCheckbutton",
+               background=[("active", C["editor_row"])],
+               indicatorcolor=[
+                   ("selected", C["accent"]),
+                   ("!selected", C["editor_input"])
+               ],
+               focuscolor=[("active", C["editor_row"])])
+
 root.title(f"MovieList {APP_VERSION}")
 _center_window(root, 1100, 650)
 root.minsize(860, 540)
@@ -637,7 +765,7 @@ _apply_dark_titlebar(root)
 
 try:
     root.iconbitmap("logo.ico")
-except:
+except Exception:
     pass
 
 layout = ctk.CTkFrame(root, fg_color="transparent")
@@ -666,8 +794,9 @@ nav_f = ctk.CTkFrame(sidebar, fg_color="transparent")
 nav_f.pack(fill="x", pady=10)
 
 
-def _sect(t): ctk.CTkLabel(nav_f, text=t, font=("Arial", 9, "bold"), text_color=C["text_dim"], anchor="w").pack(
-    fill="x", padx=16, pady=(8, 2))
+def _sect(t):
+    ctk.CTkLabel(nav_f, text=t, font=("Arial", 9, "bold"), text_color=C["text_dim"], anchor="w").pack(
+        fill="x", padx=16, pady=(8, 2))
 
 
 _make_nav_item(nav_f, "scan", "🔍", "Оновити базу", action_scan)
@@ -676,10 +805,10 @@ _make_nav_item(nav_f, "sheet", "📊", "Відкрити таблицю", action
 _make_nav_item(nav_f, "html", "🎬", "Відкрити вітрину", action_html)
 
 _sect("ІНСТРУМЕНТИ")
-_make_nav_item(nav_f, "editor", "✏️", "Редактор", lambda: (_show_panel("editor"), _panels["editor"].reload()),
+_make_nav_item(nav_f, "editor", "✏️", "Редактор",
+               lambda: (_show_panel("editor"), _panels["editor"].reload()),
                show_badge=True)
 _make_nav_item(nav_f, "logs", "📁", "Папка з логами", action_logs)
-
 
 copyright_lbl = ctk.CTkLabel(
     sidebar,
@@ -689,7 +818,6 @@ copyright_lbl = ctk.CTkLabel(
     cursor="hand2"
 )
 copyright_lbl.pack(side="bottom", pady=8)
-
 copyright_lbl.bind("<Button-1>", lambda e: webbrowser.open(GITHUB_URL))
 
 main_area = ctk.CTkFrame(layout, fg_color=C["bg"], corner_radius=0)
@@ -713,7 +841,9 @@ content_area.rowconfigure(0, weight=1)
 _panels["overview"] = _build_overview_panel(content_area)
 _panels["editor"] = _build_editor_panel(content_area)
 
-for p in _panels.values(): p.grid(row=0, column=0, sticky="nsew"), p.grid_remove()
+for p in _panels.values():
+    p.grid(row=0, column=0, sticky="nsew")
+    p.grid_remove()
 
 sys.stdout, sys.stderr = TextRedirector(), TextRedirector()
 root.after(100, _process_log_queue)
