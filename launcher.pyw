@@ -28,7 +28,7 @@ if not os.path.exists(".env"):
 
 import main
 import build_html
-from config import APP_VERSION, DB_PATH, HTML_PATH
+from config import APP_VERSION, DB_PATH, HTML_PATH, GITHUB_NAME, GITHUB_URL
 
 # --- ГЛОБАЛЬНІ ЗМІННІ GUI ---
 lbl_total = None
@@ -680,8 +680,17 @@ _make_nav_item(nav_f, "editor", "✏️", "Редактор", lambda: (_show_pan
                show_badge=True)
 _make_nav_item(nav_f, "logs", "📁", "Папка з логами", action_logs)
 
-ctk.CTkLabel(sidebar, text=f"© {datetime.now().year} shylosa", font=("Arial", 10), text_color=C["text_dim"]).pack(
-    side="bottom", pady=8)
+
+copyright_lbl = ctk.CTkLabel(
+    sidebar,
+    text=f"© {datetime.now().year} {GITHUB_NAME}",
+    font=("Arial", 10),
+    text_color=C["text_dim"],
+    cursor="hand2"
+)
+copyright_lbl.pack(side="bottom", pady=8)
+
+copyright_lbl.bind("<Button-1>", lambda e: webbrowser.open(GITHUB_URL))
 
 main_area = ctk.CTkFrame(layout, fg_color=C["bg"], corner_radius=0)
 main_area.grid(row=0, column=1, sticky="nsew")
