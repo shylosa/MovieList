@@ -3,8 +3,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-APP_VERSION = "1.2.5"
+APP_VERSION = "1.4.0"
 
+DB_PATH = "movies.db"
+HTML_PATH = "index.html"
+POSTERS_DIR = "posters"
 MEDIA_FOLDER_PATH = os.getenv("MEDIA_FOLDER_PATH", "")
 EXCLUDE_FOLDERS_RAW = os.getenv("EXCLUDE_FOLDERS", "")
 EXCLUDE_LIST = [item.strip() for item in EXCLUDE_FOLDERS_RAW.split(",") if item.strip()]

@@ -1,12 +1,20 @@
 import os
-import requests
+import re
 import logging
+import time
+from pathlib import Path
+from typing import Any
+
+import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from config import TMDB_API_KEY
+from config import TMDB_API_KEY, POSTERS_DIR
 
 
 class TMDBFetcher:
+    # Виносимо базовий URL зображень у константу
+    IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
+
     def __init__(self):
         self.api_key = TMDB_API_KEY
         if not self.api_key:
@@ -14,7 +22,9 @@ class TMDBFetcher:
 
         self.base_url = "https://api.themoviedb.org/3"
 
-        # --- МАГІЯ НАДІЙНОСТІ: Налаштовуємо сесію з авто-повторами ---
+        # 🟠 Оптимізація I/O: створюємо директорію один раз при старті, а не в циклі
+        os.makedirs(POSTERS_DIR, exist_ok=True)
+
         self.session = requests.Session()
 
         # Налаштування: 3 спроби, пауза: 1с, 2с, 4с.
@@ -29,13 +39,17 @@ class TMDBFetcher:
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
 
-    def search_movie(self, title: str, year: str = "", original_filename: str = "") -> dict:
+    def search_movie(self, title: str, year: str = "", original_filename: str = "") -> dict[str, Any]:
         url = f"{self.base_url}/search/multi"
         params = {
             "api_key": self.api_key,
             "query": title,
             "language": "uk-UA"
         }
+
+        # 🟡 Фікс багу: використовуємо рік, якщо він переданий для точнішого пошуку
+        if year:
+            params["year"] = year
 
         try:
             response = self.session.get(url, params=params, timeout=(5, 15))
@@ -62,15 +76,47 @@ class TMDBFetcher:
             details_response.raise_for_status()
             details_data = details_response.json()
 
-            return self._format_result(details_data, media_type, original_filename)
+            # 🟡 SRP: Отримуємо "чистий" відформатований словник (без побічних ефектів I/O)
+            result = self._format_result(details_data, media_type, original_filename)
+
+            # 🟡 SRP: Робимо завантаження окремо, якщо є постер
+            if result.get("poster_url"):
+                result["local_poster_path"] = self._download_poster(result["poster_url"], original_filename)
+
+            return result
 
         except requests.exceptions.RequestException as e:
             logging.error(f"Помилка мережі при зверненні до TMDB для '{title}': {e}")
             print(f"⚠️ Мережева помилка (TMDB): {e}")
             return {}
 
-    def _format_result(self, data: dict, media_type: str, original_filename: str) -> dict:
-        # Витягуємо назви (для фільмів і серіалів ключі відрізняються)
+    def get_movie_by_id(self, tmdb_id: str, original_filename: str = "") -> dict[str, Any]:
+        """Отримує детальну інформацію про фільм за його TMDB ID."""
+        url = f"{self.base_url}/movie/{tmdb_id}"
+        params = {
+            "api_key": self.api_key,
+            "language": "uk-UA",
+            "append_to_response": "credits"
+        }
+
+        try:
+            response = self.session.get(url, params=params, timeout=(5, 15))
+            response.raise_for_status()
+
+            # Використовуємо наш єдиний парсер результатів
+            result = self._format_result(response.json(), "movie", original_filename)
+
+            # Завантажуємо постер, якщо він є
+            if result.get("poster_url"):
+                result["local_poster_path"] = self._download_poster(result["poster_url"], original_filename)
+
+            return result
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Помилка завантаження по ID {tmdb_id}: {e}")
+            return {}
+
+    def _format_result(self, data: dict[str, Any], media_type: str, original_filename: str) -> dict[str, Any]:
+        # Витягуємо назви
         official_title = data.get("title") if media_type == "movie" else data.get("name")
         original_title = data.get("original_title") if media_type == "movie" else data.get("original_name")
 
@@ -89,14 +135,9 @@ class TMDBFetcher:
         # Опис
         overview = data.get("overview", "")
 
-        # Завантажуємо постер
-        poster_url = ""
-        local_poster_path = ""
+        # ⚪ Якість коду: Використовуємо константу замість магічного рядка
         poster_path = data.get("poster_path")
-
-        if poster_path:
-            poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
-            local_poster_path = self._download_poster(poster_url, original_filename)
+        poster_url = f"{self.IMAGE_BASE_URL}{poster_path}" if poster_path else ""
 
         return {
             "official_title": official_title or original_filename,
@@ -106,13 +147,19 @@ class TMDBFetcher:
             "overview": overview,
             "cast": cast,
             "poster_url": poster_url,
-            "local_poster_path": local_poster_path
+            "local_poster_path": ""  # Дефолтне значення, заповниться в search_movie
         }
 
     def _download_poster(self, url: str, filename: str) -> str:
-        os.makedirs("posters", exist_ok=True)
-        safe_name = os.path.splitext(filename)[0]
-        local_path = os.path.join("posters", f"{safe_name}.jpg")
+        clean_name = Path(filename).stem
+        # Додано крапку в регулярку і .strip()
+        safe_name = re.sub(r'[\\/*?:"<>|.]', "", clean_name).strip()
+
+        # Якщо після очищення ім'я стало порожнім (наприклад, файл називався "..mkv")
+        if not safe_name:
+            safe_name = f"unknown_{int(time.time())}"
+
+        local_path = os.path.join(POSTERS_DIR, f"{safe_name}.jpg")
 
         # Якщо постер вже є на диску - не качаємо його повторно
         if os.path.exists(local_path):
