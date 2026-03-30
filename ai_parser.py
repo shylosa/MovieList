@@ -7,7 +7,7 @@ from typing import Any
 from google import genai
 from google.genai import types
 
-from config import GEMINI_API_KEY
+from config import GEMINI_API_KEY, cancel_event
 
 
 class GeminiParser:
@@ -66,24 +66,28 @@ class GeminiParser:
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     response_schema=self._get_response_schema(),
-                    temperature=0.2  # Низька температура для більшої стабільності парсингу
+                    temperature=0.2
                 )
             )
-
-            text_response = response.text
-            logging.debug(f"=== СИРА ВІДПОВІДЬ GEMINI ===\n{text_response}\n=============================")
-
-            return self._extract_list_from_json(text_response)
+            return self._extract_list_from_json(response.text)
 
         except Exception as e:
-            logging.warning(f"Помилка парсингу ШІ під час запиту: {e}")
+            error_msg = str(e)
+            # Розшифровуємо найчастіші помилки Google API для користувача
+            if "503" in error_msg or "UNAVAILABLE" in error_msg:
+                print("❌ Сервери Gemini зараз перевантажені (Помилка 503).")
+            elif "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                print("❌ Вичерпано ліміт запитів до ШІ (Помилка 429).")
+            elif "400" in error_msg:
+                print("❌ Неправильний формат запиту до ШІ (Помилка 400).")
+            else:
+                print(f"❌ Невідома помилка ШІ: {error_msg.split('.')[0]}")  # Виводимо тільки перше речення
+
+            logging.warning(f"Детальний збій Gemini: {repr(e)}")
             return None
 
     def clean_filenames_bulk(self, filenames: list[str], max_retries: int = 3) -> list[dict[str, Any]]:
-        """
-        Головний метод: керує логікою повторних спроб (Retry logic).
-        Когнітивна складність знижена з 18 до ~5.
-        """
+        """Керує логікою повторних спроб (Retry logic) із можливістю зупинки."""
         if not filenames:
             return []
 
@@ -97,27 +101,38 @@ class GeminiParser:
         3. Identify TV shows clearly (if you see S01, S04, Season, WEB-DLRip for a show, treat it as a TV series).
         4. Translate transliterated words logically.
 
+        CRITICAL RULE FOR "year": 
+        The year in your output MUST be within +/- 1 year of the year mentioned in the original filename. (e.g., if the file says 2026, acceptable answers are 2025, 2026, or 2027). 
+        NEVER change the year by 2 or more years to fit a known movie. If no exact match is found within the +/- 1 year range, keep the year exactly as it appears in the filename and translate the title literally.
+
         List of files:
         {filenames_str}
         """
 
-        print(f"   🧠 Пакетне розпізнавання (пріоритет: новинки) для {len(filenames)} файлів...")
-        logging.info(f"Відправка запиту до Gemini для {len(filenames)} файлів.")
+        print(f"   🧠 Пакетне розпізнавання для {len(filenames)} файлів...")
 
         for attempt in range(max_retries):
+            if cancel_event.is_set():
+                print("🛑 Запит до ШІ перервано користувачем.")
+                return []
+
             result = self._make_api_request(prompt)
 
-            # Якщо отримали валідний результат (навіть порожній список), повертаємо його
             if result is not None:
                 return result
 
-            # Логіка очікування між спробами (Exponential Backoff)
             if attempt < max_retries - 1:
                 sleep_time = 2 ** attempt
-                print(f"⏳ Збій мережі/API (Gemini). Повторна спроба через {sleep_time} сек...")
-                time.sleep(sleep_time)
+                print(
+                    f"⏳ Повторна спроба {attempt + 2}/{max_retries} через {sleep_time} сек (Натисніть 'Зупинити' для скасування)...")
+
+                # Чекаємо sleep_time, але перевіряємо кнопку кожні 0.5 сек
+                for _ in range(int(sleep_time * 2)):
+                    if cancel_event.is_set():
+                        print("🛑 Очікування перервано.")
+                        return []
+                    time.sleep(0.5)
             else:
-                logging.error(f"Усі {max_retries} спроби доступу до Gemini вичерпано.")
-                print(f"❌ Помилка ШІ після {max_retries} спроб.")
+                print(f"❌ Усі {max_retries} спроби вичерпано. Пропускаємо.")
 
         return []

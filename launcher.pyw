@@ -30,6 +30,7 @@ if not os.path.exists(".env"):
 
 import main
 import build_html
+from config import cancel_event
 from config import APP_VERSION, DB_PATH, HTML_PATH, GITHUB_NAME, GITHUB_URL
 
 # --- ГЛОБАЛЬНІ ЗМІННІ GUI ---
@@ -123,6 +124,12 @@ def _center_window(window: ctk.CTk, width: int, height: int) -> None:
 
 
 def run_in_thread(func) -> None:
+    # 1. Скидаємо прапорець перед новим запуском
+    cancel_event.clear()
+
+    # 2. Показуємо кнопку зупинки (зліва від кнопки копіювання)
+    stop_btn.place(relx=1.0, rely=0.5, anchor="e", x=-125)
+
     console.configure(state="normal")
     console.delete("1.0", tk.END)
     console.configure(state="disabled")
@@ -145,6 +152,7 @@ def run_in_thread(func) -> None:
             root.after(0, lambda: progress_bar.set(0))
             root.after(0, progress_bar.pack_forget)
             root.after(0, lambda: _set_nav_loading(False))
+            root.after(0, stop_btn.place_forget)
 
     threading.Thread(target=wrapped, daemon=True).start()
 
@@ -402,6 +410,14 @@ def _build_overview_panel(parent: ctk.CTkFrame) -> ctk.CTkFrame:
     copy_btn = ctk.CTkButton(ctopbar, text="📋 Копіювати", command=_copy, width=110, height=22, font=("Arial", 11),
                              fg_color="#1c1c1c", text_color=C["nav_fg"], corner_radius=5)
     copy_btn.place(relx=1.0, rely=0.5, anchor="e", x=-8)
+
+    global stop_btn
+    stop_btn = ctk.CTkButton(
+        ctopbar, text="🛑 Зупинити",
+        command=lambda: cancel_event.set(),  # Піднімаємо прапорець зупинки
+        width=100, height=22, font=("Arial", 11, "bold"),
+        fg_color="#6b2121", hover_color="#8f2a2a", text_color="white", corner_radius=5
+    )
 
     global console
     console = tk.Text(
@@ -705,10 +721,21 @@ def _build_editor_panel(parent: ctk.CTkFrame) -> ctk.CTkFrame:
 
         def task():
             main.fix_recognition(sel)
-            root.after(0, refresh_stats)
-            # Інвалідуємо кеш — наступне відкриття Editor перезавантажить БД
-            _state["db_loaded"] = False
-            root.after(0, lambda: _reload_funcs["editor"]())
+
+            def _update_ui_after_fix():
+                for item in sel:
+                    fname = item["filename"]
+                    if fname in check_vars:
+                        check_vars[fname].set(False)
+                    if fname in hint_vars:
+                        hint_vars[fname].set("")
+
+                refresh_stats()
+
+                _state["db_loaded"] = False
+                _reload_funcs["editor"]()
+
+            root.after(0, _update_ui_after_fix)
 
         run_in_thread(task)
 

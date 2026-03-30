@@ -8,7 +8,7 @@ from datetime import datetime
 import sqlite3
 import traceback
 
-from config import APP_VERSION, MEDIA_FOLDER_PATH, EXCLUDE_LIST, DB_PATH
+from config import APP_VERSION, MEDIA_FOLDER_PATH, EXCLUDE_LIST, DB_PATH, cancel_event
 
 from scanner import VideoScanner
 from title_parser import MovieParser
@@ -126,6 +126,9 @@ def _phase1_classic_search(new_files: list[str], parser, fetcher, db_local) -> l
     ai_queue = []
 
     for filename in new_files:
+        if cancel_event.is_set():
+            print("\n🛑 Процес сканування зупинено користувачем!")
+            break  # Виходимо з циклу
         parsed = parser.parse_filename(filename)
         title, year = parsed.get('title'), parsed.get('year')
 
@@ -353,6 +356,9 @@ def fix_recognition(data_list):
         fetcher = TMDBFetcher()
 
         for item in data_list:
+            if cancel_event.is_set():
+                print("\n🛑 Процес виправлення зупинено користувачем!")
+                break
             _process_single_fix_item(item, db_local, ai, fetcher)
 
         print("\n" + "=" * 40)

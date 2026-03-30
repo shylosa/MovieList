@@ -20,6 +20,7 @@ movies.db
 posters/
 logs/
 index.html
+SQLite/
 
 # IDE (Налаштування PyCharm)
 .idea/
