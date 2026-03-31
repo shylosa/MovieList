@@ -30,8 +30,9 @@ if not os.path.exists(".env"):
 
 import main
 import build_html
+from google import genai
 from config import cancel_event
-from config import APP_VERSION, DB_PATH, HTML_PATH, GITHUB_NAME, GITHUB_URL
+from config import APP_VERSION, DB_PATH, HTML_PATH, GITHUB_NAME, GITHUB_URL, cancel_event, GEMINI_API_KEY
 
 # --- ГЛОБАЛЬНІ ЗМІННІ GUI ---
 lbl_total = None
@@ -187,6 +188,31 @@ def refresh_stats() -> None:
         if "editor_badge_lbl" in _nav_meta:
             _nav_meta["editor_badge_lbl"].grid_remove()
 
+
+def _fix_cyrillic_shortcuts(window: tk.Misc) -> None:
+    """Виправляє гарячі клавіші (Ctrl+C, Ctrl+V тощо) через фізичні коди клавіш (Windows)."""
+
+    def _on_ctrl_key(event: tk.Event) -> str | None:
+        # Віртуальні коди клавіш у Windows: A=65, C=67, V=86, X=88, Z=90
+        keycode_to_event = {
+            65: "<<SelectAll>>",
+            67: "<<Copy>>",
+            86: "<<Paste>>",
+            88: "<<Cut>>",
+            90: "<<Undo>>",
+        }
+
+        # Якщо натиснута потрібна клавіша, генеруємо стандартну подію Tkinter
+        if event.keycode in keycode_to_event:
+            try:
+                event.widget.event_generate(keycode_to_event[event.keycode])
+                return "break"  # Блокуємо стандартну обробку, щоб не було дублювання
+            except Exception:
+                pass
+        return None
+
+    # Слухаємо будь-яке натискання клавіші із затиснутим Control глобально
+    window.bind_all("<Control-KeyPress>", _on_ctrl_key, add="+")
 
 # ---------------------------------------------------------------------------
 # SIDEBAR NAV ITEM
@@ -345,6 +371,63 @@ def action_html():
 
     run_in_thread(task)
 
+
+# Глобальна змінна для кешування списку моделей
+_cached_models: list[str] | None = None
+
+
+def action_check_models() -> None:
+    global _cached_models
+
+    # 1. Примусово перемикаємо інтерфейс на екран із консоллю
+    _show_panel("overview")
+    _set_active_nav("models")
+
+    # 2. ОЧИЩЕННЯ КОНСОЛІ (заміни console_txt на свою назву змінної)
+    # Якщо поле захищене від вводу (read-only), розблоковуємо, чистимо, і блокуємо знову
+    console.configure(state="normal")
+    console.delete("0.0", "end")
+    console.configure(state="disabled")
+
+    # 3. Якщо список вже є в пам'яті — виводимо його
+    if _cached_models is not None:
+        print("\n🔄 Використано збережений список моделей:")
+        for m_name in _cached_models:
+            print(f" - {m_name}")
+        print("-" * 40)
+        return
+
+    # 4. Якщо списку ще немає — робимо запит до API у фоні
+    def task() -> None:
+        global _cached_models
+        print("\n🔍 Запит до Google API: Отримання списку доступних моделей...")
+        try:
+            if not GEMINI_API_KEY:
+                print("❌ Помилка: GEMINI_API_KEY не знайдено у файлі .env")
+                return
+
+            client = genai.Client(api_key=GEMINI_API_KEY)
+
+            fetched_models: list[str] = []
+            for m in client.models.list():
+                fetched_models.append(m.name)
+
+            _cached_models = fetched_models
+
+            # Очищуємо ще раз перед виводом свіжого результату (щоб стерти напис "Запит до Google API...")
+            console.configure(state="normal")
+            console.delete("0.0", "end")
+            console.configure(state="disabled")
+
+            print("✅ Доступні моделі для твого ключа:")
+            for m_name in _cached_models:
+                print(f" - {m_name}")
+
+            print("-" * 40)
+        except Exception as e:
+            print(f"❌ Помилка отримання моделей: {e}")
+
+    run_in_thread(task)
 
 def action_logs():
     if not os.path.exists("logs"):
@@ -766,6 +849,7 @@ except Exception:
 # ГОЛОВНЕ ВІКНО
 # ---------------------------------------------------------------------------
 root = ctk.CTk()
+_fix_cyrillic_shortcuts(root)
 
 # ✅ Style ініціалізується ПІСЛЯ root = ctk.CTk(), інакше Python автоматично
 # створює дефолтний Tk() як implicit root — він і з'являється як зайве біле вікно.
@@ -835,6 +919,7 @@ _sect("ІНСТРУМЕНТИ")
 _make_nav_item(nav_f, "editor", "✏️", "Редактор",
                lambda: (_show_panel("editor"), _panels["editor"].reload()),
                show_badge=True)
+_make_nav_item(nav_f, "models", "🤖", "Моделі ШІ", action_check_models)
 _make_nav_item(nav_f, "logs", "📁", "Папка з логами", action_logs)
 
 copyright_lbl = ctk.CTkLabel(
