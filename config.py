@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-APP_VERSION = "1.4.4"
+APP_VERSION = "1.4.6"
 
 GITHUB_NAME = "shylosa"
 GITHUB_URL = "https://github.com/shylosa/MovieList"
@@ -18,6 +18,9 @@ EXCLUDE_LIST = [item.strip() for item in EXCLUDE_FOLDERS_RAW.split(",") if item.
 
 TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
+GEMINI_FALLBACK_MODEL: str = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.5-flash")
 
 # Прапорець для безпечної зупинки довгих процесів
 cancel_event = threading.Event()

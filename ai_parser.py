@@ -7,15 +7,18 @@ from typing import Any
 from google import genai
 from google.genai import types
 
-from config import GEMINI_API_KEY, cancel_event
+from config import GEMINI_API_KEY, GEMINI_MODEL_NAME, GEMINI_FALLBACK_MODEL, cancel_event
 
 
 class GeminiParser:
-    def __init__(self):
+    def __init__(self) -> None:  # НОВЕ: додано типізацію повернення
         if not GEMINI_API_KEY:
             raise ValueError("❌ API Key не знайдено в config.py!")
         self.client = genai.Client(api_key=GEMINI_API_KEY)
-        self.model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
+
+        # НОВЕ: зберігаємо обидві моделі
+        self.primary_model: str = GEMINI_MODEL_NAME
+        self.fallback_model: str = GEMINI_FALLBACK_MODEL
 
     @staticmethod
     def _get_response_schema() -> dict[str, Any]:
@@ -57,11 +60,12 @@ class GeminiParser:
 
         return []
 
-    def _make_api_request(self, prompt: str) -> list[dict[str, Any]] | None:
+    # НОВЕ: додано аргумент model_name для гнучкого вибору моделі
+    def _make_api_request(self, prompt: str, model_name: str) -> list[dict[str, Any]] | None:
         """Виконує один запит до API та обробляє сиру відповідь."""
         try:
             response = self.client.models.generate_content(
-                model=self.model_name,
+                model=model_name,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -73,21 +77,22 @@ class GeminiParser:
 
         except Exception as e:
             error_msg = str(e)
-            # Розшифровуємо найчастіші помилки Google API для користувача
+            # НОВЕ: додано назву моделі у вивід помилок, щоб розуміти, хто саме впав
             if "503" in error_msg or "UNAVAILABLE" in error_msg:
-                print("❌ Сервери Gemini зараз перевантажені (Помилка 503).")
+                print(f"❌ Сервери {model_name} зараз перевантажені (Помилка 503).")
             elif "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-                print("❌ Вичерпано ліміт запитів до ШІ (Помилка 429).")
+                print(f"❌ Вичерпано ліміт запитів до {model_name} (Помилка 429).")
             elif "400" in error_msg:
-                print("❌ Неправильний формат запиту до ШІ (Помилка 400).")
+                print(f"❌ Неправильний формат запиту до {model_name} (Помилка 400).")
             else:
-                print(f"❌ Невідома помилка ШІ: {error_msg.split('.')[0]}")  # Виводимо тільки перше речення
+                print(f"❌ Невідома помилка ШІ ({model_name}): {error_msg.split('.')[0]}")
 
-            logging.warning(f"Детальний збій Gemini: {repr(e)}")
+            logging.warning(f"Детальний збій Gemini ({model_name}): {repr(e)}")
             return None
 
-    def clean_filenames_bulk(self, filenames: list[str], max_retries: int = 3) -> list[dict[str, Any]]:
-        """Керує логікою повторних спроб (Retry logic) із можливістю зупинки."""
+    # НОВЕ: зменшив стандартну кількість спроб до 2, оскільки тепер є ще резервна модель
+    def clean_filenames_bulk(self, filenames: list[str], max_retries: int = 2) -> list[dict[str, Any]]:
+        """Керує логікою повторних спроб (Retry logic) із можливістю зупинки та резервною моделлю."""
         if not filenames:
             return []
 
@@ -109,14 +114,16 @@ class GeminiParser:
         {filenames_str}
         """
 
-        print(f"   🧠 Пакетне розпізнавання для {len(filenames)} файлів...")
+        print(f"   🧠 Пакетне розпізнавання для {len(filenames)} файлів (Основна: {self.primary_model})...")
 
+        # --- СПРОБА 1: ОСНОВНА МОДЕЛЬ ---
         for attempt in range(max_retries):
             if cancel_event.is_set():
                 print("🛑 Запит до ШІ перервано користувачем.")
                 return []
 
-            result = self._make_api_request(prompt)
+            # НОВЕ: передаємо основну модель
+            result = self._make_api_request(prompt, self.primary_model)
 
             if result is not None:
                 return result
@@ -126,13 +133,27 @@ class GeminiParser:
                 print(
                     f"⏳ Повторна спроба {attempt + 2}/{max_retries} через {sleep_time} сек (Натисніть 'Зупинити' для скасування)...")
 
-                # Чекаємо sleep_time, але перевіряємо кнопку кожні 0.5 сек
                 for _ in range(int(sleep_time * 2)):
                     if cancel_event.is_set():
                         print("🛑 Очікування перервано.")
                         return []
                     time.sleep(0.5)
-            else:
-                print(f"❌ Усі {max_retries} спроби вичерпано. Пропускаємо.")
+
+        # --- СПРОБА 2: РЕЗЕРВНА МОДЕЛЬ ---
+        # НОВЕ: Логіка перемикання на запасний варіант
+        print(f"🔄 Основна модель не відповідає. Спроба через резервну: {self.fallback_model}...")
+        result = self._make_api_request(prompt, self.fallback_model)
+
+        if result is not None:
+            print("✅ Резервна модель успішно впоралася!")
+            return result
+
+        # --- ФІНАЛ: ЯКЩО НІЧОГО НЕ ДОПОМОГЛО ---
+        # НОВЕ: Виводимо зрозумілу інструкцію замість простого пропускання
+        print("\n" + "!" * 50)
+        print("⛔ КРИТИЧНО: Жодна з моделей ШІ не змогла відповісти.")
+        print("🤖 Порада: Натисніть кнопку 'Моделі ШІ' в меню зліва,")
+        print("   щоб перевірити доступні сервіси Google вручну.")
+        print("!" * 50 + "\n")
 
         return []

@@ -31,7 +31,6 @@ if not os.path.exists(".env"):
 import main
 import build_html
 from google import genai
-from config import cancel_event
 from config import APP_VERSION, DB_PATH, HTML_PATH, GITHUB_NAME, GITHUB_URL, cancel_event, GEMINI_API_KEY
 
 # --- ГЛОБАЛЬНІ ЗМІННІ GUI ---

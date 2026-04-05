@@ -239,6 +239,16 @@ def run_scan():
         _phase2_and_3_ai_processing(ai_queue, ai, fetcher, db_local)
 
     print("\n✅ Локальне сканування завершено!")
+
+    # --- Сповіщення про нерозпізнані файли ---
+    stats = get_db_stats()
+    unrecognized = stats.get("unrecognized", 0)
+    if unrecognized > 0:
+        print("\n" + "⚠️" * 20)
+        print(f"⚠️ УВАГА: У базі є {unrecognized} нерозпізнаних файлів!")
+        print("💡 Перейдіть у вкладку 'Редактор' для їх швидкого виправлення.")
+        print("⚠️" * 20)
+
     logging.info("=== Сканування завершено ===")
 
 

@@ -3,7 +3,7 @@ Creator: Serhii Shylo
 Tags: Python, Movie Library, TMDB, Gemini AI, Google Sheets, HTML Catalog, Local Media, Automation
 Requires at least: Python 3.10, Google Cloud Console API, TMDB API Key, Gemini API Key
 License: MIT License
-Version: 1.4.4
+Version: 1.4.6
 ---
 
 # 🍿 MovieList - Менеджер локальної медіатеки
@@ -108,3 +108,15 @@ Live Log: Усі події відображаються у реальному �
 `build_html.py` — Високопродуктивний генератор SPA-вітрини index.html із вбудованим JS-пошуком та XSS-захистом.
 
 `sheets.py` — Синхронізація з Google Sheets (з автоматичним ретраєм при лімітах API).
+
+**Тести**
+
+Запуск усіх тестів:
+```bash
+pytest -v
+```
+
+Запуск обраного файлу:
+```bash
+pytest tests/test_scanner.py -v
+```
